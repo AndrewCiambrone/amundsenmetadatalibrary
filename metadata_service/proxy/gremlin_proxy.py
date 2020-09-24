@@ -47,6 +47,30 @@ def _parse_gremlin_server_error(exception: Exception) -> Dict[str, Any]:
     return json.loads(exception.args[0][exception.args[0].index(': ') + 1:])
 
 
+def _parse_descriptions(descriptions):
+    """
+    Preferentially choose the first user-created description, or fall back to a programmatic one.
+    Does not handle the case where there might be multiple descriptions of either type.
+
+    Expects a list like:
+    [{"text": text_of_description", "description_type": "Programmatic_Description" | "Description" }]
+    """
+    programmatic_descriptions = [
+        d for d in descriptions
+        if d.get('description_type') == "Programmatic_Description"
+    ]
+    default_descriptions = [
+        d for d in descriptions
+        if d.get('description_type') == "Description"
+    ]
+    if len(default_descriptions) > 0:
+        return default_descriptions[0].get('text', '')
+    elif len(programmatic_descriptions) > 0:
+        return programmatic_descriptions[0].get('text', '')
+    else:
+        return ''
+
+
 class AbstractGremlinProxy(BaseProxy):
     """
     Gremlin Proxy client for the amundsen metadata
@@ -145,7 +169,7 @@ class AbstractGremlinProxy(BaseProxy):
                 'name',
                 'is_view',
                 'key',
-                'description',
+                'table_descriptions',
                 'columns',
                 'tags',
                 'owners',
@@ -160,7 +184,8 @@ class AbstractGremlinProxy(BaseProxy):
             by('name'). \
             by('is_view'). \
             by(self.key_property_name). \
-            by(__.coalesce(__.out('DESCRIPTION').values('description'), __.constant(''))). \
+            by(__.out('DESCRIPTION').project('text', 'description_type').
+               by('description').by(__.label()).fold()). \
             by(__.out('COLUMN').project('column_name', 'column_descriptions', 'column_type', 'sort_order').\
                by('name').\
                by(__.out('DESCRIPTION').project('text', 'description_type').\
@@ -189,15 +214,12 @@ class AbstractGremlinProxy(BaseProxy):
         owner_nodes = result['owners']
         water_mark_nodes = result['water_marks']
         readers = self._get_table_users(table_uri=table_uri)
+        table_description = _parse_descriptions(result.get('table_descriptions'))
+
         columns = []
         for column_node in column_nodes:
-            programmatic_descriptions = [description.get('text') for description in column_node.get('column_descriptions') if description.get('description_type') == "Programmatic_Description"]
-            default_descriptions = [description.get('text') for description in column_node.get('column_descriptions') if description.get('description_type') == "Description"]
-            column_description = ''
-            if len(default_descriptions) > 0:
-                column_description = default_descriptions[0]
-            elif len(programmatic_descriptions) > 0:
-                column_description = programmatic_descriptions[0]
+            column_description = _parse_descriptions(column_node.get('column_descriptions'))
+
             # TODO column stats
             column = Column(
                 name=column_node.get('column_name'),
@@ -251,7 +273,7 @@ class AbstractGremlinProxy(BaseProxy):
             schema=result.get('schema'),
             database=result.get('database'),
             cluster=result.get('cluster'),
-            description=result.get('description'),
+            description=table_description,
             table_readers=readers,
             name=result.get('name'),
             columns=columns,

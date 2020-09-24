@@ -86,7 +86,7 @@ class TestGremlinProxy(unittest.TestCase):
             node_properties=user_dict
         )
 
-    def _create_test_table(self, table: Table):
+    def _create_test_table(self, table: Table) -> str:
         table_id = '{db}://{cluster}.{schema}/{tbl}'.format(
             db=table.database,
             cluster=table.cluster,
@@ -289,11 +289,11 @@ class TestGremlinProxy(unittest.TestCase):
             }
         )
 
-    def _create_test_description(self, description: str, entity_id: str):
-        description_id = entity_id + "/_description"
+    def _create_test_description(self, description: str, entity_id: str, is_programmatic=False):
+        description_id = entity_id + ("/_description" if not is_programmatic else "/_programmatic_description")
         self.proxy.upsert_node(
             node_id=description_id,
-            node_label="Description",
+            node_label="Description" if not is_programmatic else 'Programmatic_Description',
             node_properties={
                 'description_source': 'description',
                 'description': description
@@ -531,10 +531,26 @@ class TestGremlinProxy(unittest.TestCase):
         self.assertEqual(result_table_reader.read_count, test_reader.read_count)
 
     def test_get_table_with_description(self):
-        self.test_table.description = "This is a test description"
+        text = "This is a test description"
+        self.test_table.description = text
         self._create_test_table(self.test_table)
         result = self.proxy.get_table(table_uri=self.table_id)
-        self.assertEqual("This is a test description", result.description)
+        self.assertEqual(text, result.description)
+
+    def test_get_table_with_programmatic_description(self):
+        self._create_test_table(self.test_table)
+        text = "This is a programmatic description"
+        self._create_test_description(text, self.table_id, is_programmatic=True)
+        result = self.proxy.get_table(table_uri=self.table_id)
+        self.assertEqual(text, result.description)
+
+    def test_get_table_with_multiple_descriptions(self):
+        text = "This is a test description"
+        self.test_table.description = text
+        self._create_test_table(self.test_table)
+        self._create_test_description("This is a programmatic description", self.table_id, is_programmatic=True)
+        result = self.proxy.get_table(table_uri=self.table_id)
+        self.assertEqual(text, result.description)
 
     def test_get_table_with_owners(self):
         self.test_table.owners = [
