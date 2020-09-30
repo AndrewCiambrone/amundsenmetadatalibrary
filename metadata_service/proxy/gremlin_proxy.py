@@ -334,7 +334,7 @@ class AbstractGremlinProxy(BaseProxy):
             __.constant('')
         ).next()
 
-        return result if result else None
+        return result 
 
     def put_table_description(self, *,
                               table_uri: str,
