@@ -24,6 +24,7 @@ from beaker.util import parse_cache_config_options
 from metadata_service.entity.description import Description
 from metadata_service.entity.resource_type import ResourceType
 from metadata_service.proxy import BaseProxy
+from metadata_service.proxy.statsd_utilities import timer_with_counter
 from metadata_service.util import UserResourceRel
 from metadata_service.entity.dashboard_detail import DashboardDetail as DashboardDetailEntity
 
@@ -109,6 +110,7 @@ class AbstractGremlinProxy(BaseProxy):
         """  # noqa: E501
         return self.remote_connection._client.submit(message=command, bindings=bindings).all().result()
 
+    @timer_with_counter
     def get_user(self, *, id: str) -> Union[UserEntity, None]:
         result = self.g.V().hasLabel('User').has(self.key_property_name, id).project('id', 'email').\
             by(self.key_property_name).\
@@ -135,6 +137,7 @@ class AbstractGremlinProxy(BaseProxy):
             users.append(user)
         return users
 
+    @timer_with_counter
     def get_table(self, *, table_uri: str) -> Table:
         result = self.g.V().has(self.key_property_name, table_uri). \
             project(
@@ -302,6 +305,7 @@ class AbstractGremlinProxy(BaseProxy):
 
         return readers
 
+    @timer_with_counter
     def delete_owner(self, *, table_uri: str, owner: str) -> None:
         forward_key = "{from_vertex_id}_{to_vertex_id}_{label}".format(
             from_vertex_id=owner,
@@ -318,6 +322,7 @@ class AbstractGremlinProxy(BaseProxy):
             __.has(self.key_property_name, forward_key)
         ).drop().iterate()
 
+    @timer_with_counter
     def add_owner(self, *, table_uri: str, owner: str) -> None:
         user = self.get_user(id=owner)
         self.upsert_edge(
@@ -336,6 +341,7 @@ class AbstractGremlinProxy(BaseProxy):
 
         return result 
 
+    @timer_with_counter
     def put_table_description(self, *,
                               table_uri: str,
                               description: str) -> None:
@@ -375,6 +381,7 @@ class AbstractGremlinProxy(BaseProxy):
         )
         tx.next()
 
+    @timer_with_counter
     def add_tag(self, *, id: str, tag: str, tag_type: str, resource_type: ResourceType = ResourceType.Table) -> None:
         # id is the table id.
         node_properties = {
@@ -403,6 +410,7 @@ class AbstractGremlinProxy(BaseProxy):
         )
         tx.next()
 
+    @timer_with_counter
     def delete_tag(self, *, id: str, tag: str, tag_type: str,
                    resource_type: ResourceType = ResourceType.Table) -> None:
 
@@ -423,6 +431,7 @@ class AbstractGremlinProxy(BaseProxy):
         ).drop()
         tx.iterate()
 
+    @timer_with_counter
     def put_column_description(self, *,
                                table_uri: str,
                                column_name: str,
@@ -461,6 +470,7 @@ class AbstractGremlinProxy(BaseProxy):
         column_uri = table_uri + '/' + column_name + '/_description'  # type: str
         return self.g.V().has(self.key_property_name, column_uri).values('description').next()
 
+    @timer_with_counter
     def get_popular_tables(self, *, num_entries: int) -> List[PopularTable]:
         table_uris = self._get_popular_tables(num_entries)
         if not table_uris:
@@ -622,6 +632,7 @@ class AbstractGremlinProxy(BaseProxy):
             ))
         return {'table': results}
 
+    @timer_with_counter
     def add_resource_relation_by_user(self, *,
                                       id: str,
                                       user_id: str,
@@ -676,6 +687,7 @@ class AbstractGremlinProxy(BaseProxy):
 
         tx.next()
 
+    @timer_with_counter
     def delete_resource_relation_by_user(self, *,
                                          id: str,
                                          user_id: str,
@@ -708,6 +720,7 @@ class AbstractGremlinProxy(BaseProxy):
 
         self.g.E().has(self.key_property_name, within(edge_ids)).drop().iterate()
 
+    @timer_with_counter
     def get_dashboard(self,
                       dashboard_uri: str,
                       ) -> DashboardDetailEntity:
@@ -717,6 +730,7 @@ class AbstractGremlinProxy(BaseProxy):
                                   id: str) -> Description:
         raise NotImplementedError()
 
+    @timer_with_counter
     def put_dashboard_description(self, *,
                                   id: str,
                                   description: str) -> None:
